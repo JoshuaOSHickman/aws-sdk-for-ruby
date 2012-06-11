@@ -237,7 +237,13 @@ module AWS
         sleeps = sleep_durations(response)
         while should_retry?(response)
           break if sleeps.empty?
-          Kernel.sleep(sleeps.shift)
+          if defined?(EM) && EM.reactor_running?
+            fiber = Fiber.current
+            EM::Timer.new(sleeps.shift) { fiber.resume }
+            Fiber.yield
+          else
+            Kernel.sleep(sleeps.shift)
+          end
           # rebuild the request to get a fresh signature
           rebuild_http_request(response)
           response = yield

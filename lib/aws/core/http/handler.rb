@@ -67,7 +67,13 @@ module AWS
         end
   
         def sleep_with_callback seconds, &block
-          Kernel.sleep(seconds)
+          if defined?(EM) && EM.reactor_running?
+            fiber = Fiber.current
+            EM::Timer.new(sleeps.shift) { fiber.resume }
+            Fiber.yield
+          else
+            Kernel.sleep(seconds)
+          end
           yield
         end
   
