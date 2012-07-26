@@ -239,7 +239,7 @@ module AWS
           break if sleeps.empty?
           if defined?(EM) && EM.reactor_running?
             fiber = Fiber.current
-            EM::Timer.new(sleeps.shift) { fiber.resume }
+            EM::Timer.new(sleeps.shift / 1000) { fiber.resume }
             Fiber.yield
           else
             Kernel.sleep(sleeps.shift)
