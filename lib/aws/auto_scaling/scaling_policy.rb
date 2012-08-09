@@ -13,6 +13,21 @@
 
 module AWS
   class AutoScaling
+
+    # 
+    # @attr_reader [String] arn
+    #
+    # @attr_reader [String] adjustment_type
+    #
+    # @attr_reader [Integer] scaling_adjustment
+    #
+    # @attr_reader [Hash] alarms Returns a hash of alarms names (keys)
+    #   to alarm ARNs (values).
+    #
+    # @attr_reader [Integer] cooldown
+    #
+    # @attr_reader [Integer] min_adjustment_magnitude
+    #
     class ScalingPolicy < Core::Resource
 
       include ScalingPolicyOptions
@@ -32,7 +47,7 @@ module AWS
       # @return [String]
       attr_reader :name
 
-      attribute :arn, :as => :policy_arn, :static => true
+      attribute :arn, :from => :policy_arn, :static => true
 
       attribute :adjustment_type
 
@@ -47,6 +62,8 @@ module AWS
       end
 
       attribute :cooldown
+
+      attribute :min_adjustment_magintude
 
       populates_from(:describe_policies) do |resp|
         resp.scaling_policies.find do |p| 

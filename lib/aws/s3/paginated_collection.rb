@@ -17,7 +17,7 @@ module AWS
     # @private
     module PaginatedCollection
 
-      include Core::Collection::Limitable
+      include Core::Collection::WithLimitAndNextToken
 
       protected
       def _each_item markers, limit, options = {}, &block
@@ -29,7 +29,7 @@ module AWS
         response = list_request(options)
 
         each_member_in_page(response, &block)
-      
+
         response.data[:truncated] ? next_markers(response) : nil
 
       end

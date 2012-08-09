@@ -12,6 +12,7 @@
 # language governing permissions and limitations under the License.
 
 require 'spec_helper'
+require 'stringio'
 
 module AWS::Core::Http
   describe NetHttpHandler do
@@ -22,8 +23,9 @@ module AWS::Core::Http
       double('aws-request',
         :http_method => 'POST',
         :host => 'host.com',
+        :port => '443',
         :uri => '/path?querystring',
-        :body => 'body',
+        :body_stream => StringIO.new('body'),
         :proxy_uri => nil,
         :use_ssl? => true,
         :ssl_verify_peer? => true,
@@ -41,40 +43,24 @@ module AWS::Core::Http
 
     let(:http_response) {
       double('http-response',
-        :body => 'resp-body', 
-        :code => '200', 
+        :code => '200',
+        :body => 'resp-body',
+        :read_body => 'resp-body',
         :to_hash => { 'header-name' => ['header-value'] })
     }
 
     before(:each) do
-      http.stub(:request).and_return(http_response)
+      http.stub(:request).and_yield(http_response)
       http.stub(:started?).and_return(true)
       Net::HTTP.stub(:new).and_return(http)
-      AWS::Core::Http::NetHttpHandler.pool.empty!
     end
 
     context 'http session' do
-      
+
       it 'connects to the request host' do
         request.stub(:host).and_return('hostname.com')
         Net::HTTP.should_receive(:new).
           with('hostname.com', anything).
-          and_return(http)
-        handle!
-      end
-
-      it 'uses port 80 for non-ssl requests' do
-        request.stub(:use_ssl?).and_return(false)
-        Net::HTTP.should_receive(:new).
-          with(anything, 80).
-          and_return(http)
-        handle!
-      end
-
-      it 'uses port 443 for ssl requests' do
-        request.stub(:use_ssl?).and_return(true)
-        Net::HTTP.should_receive(:new).
-          with(request.host, 443).
           and_return(http)
         handle!
       end
@@ -89,7 +75,7 @@ module AWS::Core::Http
     end
 
     context 'proxies' do
-      
+
       it 'passes proxy information to the session' do
 
         p = URI.parse('https://user:pass@proxy.com:443/path?query')
@@ -106,7 +92,7 @@ module AWS::Core::Http
     end
 
     context 'ssl verification' do
-      
+
       it 'enables ssl on the http session when the request is ssl' do
 
         request.stub(:use_ssl?).and_return(true)
@@ -146,7 +132,7 @@ module AWS::Core::Http
     context 'request' do
 
       it 'builds the request with the request uri, headers and body' do
-        
+
         request.stub(:http_method).and_return('GET')
 
         http_request = double('http-request')
@@ -155,12 +141,12 @@ module AWS::Core::Http
           with(request.uri, request.headers.merge('content-type' => '')).
           and_return(http_request)
 
-        http_request.should_receive(:body=).with(request.body)
+        http_request.should_receive(:body_stream=).with(request.body_stream)
 
         handle!
-        
+
       end
-      
+
       it 'makes a get request when http method is GET' do
 
         request.stub(:http_method).and_return('GET')
@@ -170,9 +156,9 @@ module AWS::Core::Http
         end.and_return(http_response)
 
         handle!
-        
+
       end
-      
+
       it 'makes a get request when http method is PUT' do
 
         request.stub(:http_method).and_return('PUT')
@@ -182,9 +168,9 @@ module AWS::Core::Http
         end.and_return(http_response)
 
         handle!
-        
+
       end
-      
+
       it 'makes a get request when http method is POST' do
 
         request.stub(:http_method).and_return('POST')
@@ -194,9 +180,9 @@ module AWS::Core::Http
         end.and_return(http_response)
 
         handle!
-        
+
       end
-      
+
       it 'makes a get request when http method is HEAD' do
 
         request.stub(:http_method).and_return('HEAD')
@@ -206,9 +192,9 @@ module AWS::Core::Http
         end.and_return(http_response)
 
         handle!
-        
+
       end
-      
+
       it 'makes a get request when http method is DELETE' do
 
         request.stub(:http_method).and_return('DELETE')
@@ -218,7 +204,7 @@ module AWS::Core::Http
         end.and_return(http_response)
 
         handle!
-        
+
       end
 
       it 'raises an error for unhandled http request methods' do
@@ -255,7 +241,7 @@ module AWS::Core::Http
       it 'traps timeout errors and populates them on the response' do
         http.stub(:request).and_raise(Timeout::Error)
         handle!
-        response.timeout.should == true
+        response.network_error?.should == true
       end
 
     end

@@ -19,36 +19,40 @@ module AWS
   module Core
     module Signature
       module Version4
-  
-        def add_authorization! signer
-          self.access_key_id = signer.access_key_id
+
+        def self.included base
+          base.send(:include, Signer)
+        end
+
+        def add_authorization! credentials
           datetime = Time.now.utc.strftime("%Y%m%dT%H%M%SZ")
           headers['content-type'] ||= 'application/x-www-form-urlencoded'
           headers['host'] = host
           headers['x-amz-date'] = datetime
-          headers['x-amz-security-token'] = signer.session_token if signer.session_token
-          headers['authorization'] = authorization(signer, datetime)
+          headers['x-amz-security-token'] = credentials.session_token if
+            credentials.session_token
+          headers['authorization'] = authorization(credentials, datetime)
         end
-        
+
         protected
-  
-        def authorization signer, datetime
+
+        def authorization credentials, datetime
           parts = []
-          parts << "AWS4-HMAC-SHA256 Credential=#{access_key_id}/#{credential_string(datetime)}"
+          parts << "AWS4-HMAC-SHA256 Credential=#{credentials.access_key_id}/#{credential_string(datetime)}"
           parts << "SignedHeaders=#{signed_headers}"
-          parts << "Signature=#{hex16(signature(signer, datetime))}"
+          parts << "Signature=#{hex16(signature(credentials, datetime))}"
           parts.join(', ')
         end
-  
-        def signature signer, datetime
-          k_secret = signer.secret_access_key
+
+        def signature credentials, datetime
+          k_secret = credentials.secret_access_key
           k_date = hmac("AWS4" + k_secret, datetime[0,8])
           k_region = hmac(k_date, region)
           k_service = hmac(k_region, service)
           k_credentials = hmac(k_service, 'aws4_request')
           hmac(k_credentials, string_to_sign(datetime))
         end
-  
+
         def string_to_sign datetime
           parts = []
           parts << 'AWS4-HMAC-SHA256'
@@ -57,8 +61,8 @@ module AWS
           parts << hex16(hash(canonical_request))
           parts.join("\n")
         end
-  
-        def credential_string datetime 
+
+        def credential_string datetime
           parts = []
           parts << datetime[0,8]
           parts << region
@@ -66,72 +70,51 @@ module AWS
           parts << 'aws4_request'
           parts.join("/")
         end
-  
+
         def canonical_request
           parts = []
-          parts << action_name
-          parts << canonical_uri
-          parts << canonical_querystring
+          parts << http_method
+          parts << path
+          parts << querystring
           parts << canonical_headers + "\n"
           parts << signed_headers
-          parts << hex16(hash(payload))
+          parts << hex16(hash(body || ''))
           parts.join("\n")
         end
-  
+
         def service
           # this method is implemented in the request class for each service
           raise NotImplementedError
         end
-  
-        def action_name
-          http_method.to_s.upcase
-        end
-  
-        def canonical_uri
-          path
-        end
-  
-        def payload
-          body || ''
-        end
-  
-        def canonical_querystring
-          http_method.to_s.upcase == 'GET' ? url_encoded_params : ''
-        end
-  
+
         def signed_headers
           to_sign = headers.keys.map{|k| k.to_s.downcase }
           to_sign.delete('authorization')
           to_sign.sort.join(";")
         end
-  
+
         def canonical_headers
           headers = []
           self.headers.each_pair do |k,v|
-            header = [k.to_s.downcase, v]
-            headers << header unless header.first == 'authorization'
+            headers << [k,v] unless k == 'authorization'
           end
           headers = headers.sort_by(&:first)
           headers.map{|k,v| "#{k}:#{canonical_header_values(v)}" }.join("\n")
         end
-  
+
         def canonical_header_values values
           values = [values] unless values.is_a?(Array)
           values.map(&:to_s).map(&:strip).join(',')
         end
-  
+
         def hex16 string
           string.unpack('H*').first
         end
-  
-        def hmac key, string
-          OpenSSL::HMAC.digest(OpenSSL::Digest::Digest.new('sha256'), key, string)
-        end
-  
+
         def hash string
           Digest::SHA256.digest(string)
         end
-  
+
       end
     end
   end

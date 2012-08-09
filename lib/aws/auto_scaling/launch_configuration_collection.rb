@@ -17,7 +17,7 @@ module AWS
   class AutoScaling
     class LaunchConfigurationCollection
 
-      include Core::Collection::Limitable
+      include Core::Collection::WithLimitAndNextToken
 
       # Creates an Auto Scaling launch configuration.
       #
@@ -26,7 +26,7 @@ module AWS
       # @param [String] name The name of the launch configuration to create.
       #
       # @param [EC2::Image,String] image An {EC2::Image} or image id string.
-      #   
+      #
       # @param [String] instance_type The type of instance (e.g.
       #   't1.micro', 'm1.small', 'm2.4xlarge', etc).
       #
@@ -34,10 +34,10 @@ module AWS
       #
       # @option options [Array<Hash>] :block_device_mappings
       #
-      # @option options [Boolean] :detailed_instance_monitoring (true) 
-      #   When enabled, CloudWatch will generate metrics every minute 
-      #   and your account will be charged a fee. When you disable 
-      #   detailed monitoring, by specifying False, Cloudwatch will 
+      # @option options [Boolean] :detailed_instance_monitoring (true)
+      #   When enabled, CloudWatch will generate metrics every minute
+      #   and your account will be charged a fee. When you disable
+      #   detailed monitoring, by specifying False, Cloudwatch will
       #   generate metrics every 5 minutes.
       #
       # @option options [String] :kernel_id The ID of the kernel to
@@ -53,29 +53,39 @@ module AWS
       # @option options [Array<EC2::SecurityGroup>,Array<String>] :security_groups
       #   The list of security groups to associate with the instances.
       #   This may be an array of {EC2::SecurityGroup} objects, security
-      #   group names or security group ids.  
+      #   group names or security group ids.
       #
-      # @option options [String] :user_data The user data available to 
+      # @option options [String] :user_data The user data available to
       #   the launched Amazon EC2 instances.
-      # 
+      #
+      # @option options [String] :iam_instance_profile
+      #
+      # @option options [String] :spot_price
+      #
       # @return [LaunchConfiguration]
       #
       def create name, image, instance_type, options = {}
-        
+
         client_opts = {}
         client_opts[:launch_configuration_name] = name
         client_opts[:image_id] = image_id_opt(image)
         client_opts[:instance_type] = instance_type
-        client_opts[:block_device_mappings] = options[:block_device_mappings] if
-          options.key?(:block_device_mappings)
         client_opts[:instance_monitoring] = instance_monitoring_opt(options) if
           options.key?(:detailed_instance_monitoring)
-        client_opts[:kernel_id] = options[:kernel_id] if options[:kernel_id]
         client_opts[:key_name] = key_name_opt(options) if options[:key_pair]
-        client_opts[:ramdisk_id] = options[:ramdisk_id] if options[:ramdisk_id]
         client_opts[:security_groups] = security_groups_opt(options) if
           options.key?(:security_groups)
         client_opts[:user_data] = user_data_opt(options) if options[:user_data]
+
+        [
+          :iam_instance_profile,
+          :spot_price,
+          :kernel_id,
+          :ramdisk_id,
+          :block_device_mappings,
+        ].each do |opt|
+          client_opts[opt] = options[opt] if options.key?(opt)
+        end
 
         client.create_launch_configuration(client_opts)
 
@@ -101,7 +111,7 @@ module AWS
 
         resp = client.describe_launch_configurations(options)
         resp.launch_configurations.each do |details|
-          
+
           launch_configuration = LaunchConfiguration.new_from(
             :describe_launch_configurations,
             details,
@@ -109,7 +119,7 @@ module AWS
             :config => config)
 
           yield(launch_configuration)
-          
+
         end
         resp.data[:next_token]
       end

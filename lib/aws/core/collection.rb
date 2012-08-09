@@ -13,37 +13,22 @@
 module AWS
   module Core
 
-    # = Different Collection Types in AWS
-    #
-    # The Collection module acts as a namespace and base implementation for
-    # the primary collection types in AWS:
-    #
-    # * {AWS::Core::Collection::Simple}
-    # * {AWS::Core::Collection::Limitable}
-    #
-    # Each AWS service allows provides a method to enumerate resources.
-    #
-    # * Services that return all results in a single response use
-    #   {AWS::Core::Collection::Simple}.
-    #
-    # * Services that truncate large results sets *AND* allow you to provide
-    #   a perfered maximum number of results use 
-    #   {AWS::Core::Collection::Limitable}.
-    #
+    # Provides useful methods for enumerating items in a collection.
     module Collection
 
       AWS.register_autoloads(self) do
-        autoload :Simple,    'simple'
-        autoload :Limitable, 'limitable'
+        autoload :Simple, 'simple'
+        autoload :WithNextToken, 'with_next_token'
+        autoload :WithLimitAndNextToken, 'with_limit_and_next_token'
       end
 
       include Enumerable
-  
+
       # Yields once for every item in this collection.
       #
       #   collection.each {|item| ... }
       #
-      # @note If you want fewer than all items, it is generally better 
+      # @note If you want fewer than all items, it is generally better
       #   to call {#page} than {#each} with a +:limit+.
       #
       # @param [Hash] options
@@ -51,13 +36,13 @@ module AWS
       # @option options [Integer] :limit (nil) The maximum number of
       #   items to enumerate from this collection.
       #
-      # @option options [next_token] :next_token (nil) 
+      # @option options [next_token] :next_token (nil)
       #   Acts as an offset.  +:next_token+ may be returned by {#each} and
       #   {#each_batch} when a +:limit+ is provided.
       #
       # @return [nil_or_next_token] Returns nil if all items were enumerated.
       #   If some items were excluded because of a +:limit+ option then
-      #   a +next_token+ is returned.  Calling an enumerable method on 
+      #   a +next_token+ is returned.  Calling an enumerable method on
       #   the same collection with the +next_token+ acts like an offset.
       #
       def each options = {}, &block
@@ -89,19 +74,15 @@ module AWS
       # a single collection.  Each batch represents all of the items returned
       # in a single resopnse.
       #
-      # @note If you require fixed size batches, see {#in_groups_of}.
-      #
+      # @note If you require fixed batch sizes, see {#in_groups_of}.
       # @param (see #each)
-      #
       # @option (see #each)
-      #
       # @return (see #each)
-      #
       def each_batch options = {}, &block
-        raise NotImplementedError
+        _each_batch(options.dup, &block)
       end
 
-      # Use this method when you want to call a method provided by 
+      # Use this method when you want to call a method provided by
       # Enumerable, but you need to pass options:
       #
       #   # raises an error because collect does not accept arguments
@@ -118,7 +99,7 @@ module AWS
       #   collection.
       #
       def enum options = {}
-        Enumerator.new(self, :each, options) 
+        Enumerator.new(self, :each, options)
       end
       alias_method :enumerator, :enum
 
@@ -132,7 +113,7 @@ module AWS
       end
 
       # Yields items from this collection in groups of an exact
-      # size (except for perhaps the last group). 
+      # size (except for perhaps the last group).
       #
       #   collection.in_groups_of (10, :limit => 30) do |group|
       #
@@ -143,7 +124,7 @@ module AWS
       #     end
       #
       #   end
-      #   
+      #
       # @param [Integer] size Size each each group of objects
       #   should be yielded in.
       # @param [Hash] options
@@ -206,13 +187,13 @@ module AWS
       #
       # @option options [String] :next_token (nil) A token that indicates
       #   an offset to use when paging items.  Next tokens are returned
-      #   by {PageResult#next_token}.  
+      #   by {PageResult#next_token}.
       #
       #   Next tokens should only be consumed by the same collection that
       #   created them.
       #
       def page options = {}
-        
+
         each_opts = options.dup
 
         per_page = each_opts.delete(:per_page)
@@ -228,7 +209,59 @@ module AWS
         Core::PageResult.new(self, items, per_page, next_token)
 
       end
-  
+
+      protected
+
+      def _each_batch options, &block
+        # should be defined in the collection modules
+        raise NotImplementedError
+      end
+
+      def _each_item next_token, options = {}, &block
+        # should be defined in classes included the collection modules
+        raise NotImplementedError
+      end
+
+      def _extract_next_token options
+        next_token = options.delete(:next_token)
+        next_token = nil if next_token == ''
+        next_token
+      end
+
+      def _extract_batch_size options
+        batch_size = options.delete(:batch_size)
+        batch_size = nil if batch_size == ''
+        batch_size = batch_size.to_i if batch_size
+        batch_size
+      end
+
+      def _extract_limit options
+        limit = options.delete(:limit) || _limit
+        limit = nil if limit == ''
+        limit = limit.to_i if limit
+        limit
+      end
+
+      # Override this method in collection classes that provide
+      # an alternative way to provide the limit than passinging
+      # it to the enumerable method as :limit.
+      #
+      # An example of when this would be useful:
+      #
+      #   collection.limit(10).each {|item| ... }
+      #
+      # The collection class including this module should define _limit
+      # and return the cached limit value (of 10 from this example).
+      # This value may still be overridden by a locally passed
+      # +:limit+ option:
+      #
+      #   # limit 5 wins out
+      #   collection.limit(10).each(:limit => 5) {|item| ... }
+      #
+      def _limit
+        nil
+      end
+
     end
   end
 end

@@ -235,7 +235,8 @@ module AWS
       end
       
       def str2sym key_desc
-        type, value = key_desc.to_a.flatten(1)
+        type = key_desc.keys.first
+        value = key_desc[type]
         case type
         when "S"  then { :s  => value }
         when "N"  then { :n  => value }

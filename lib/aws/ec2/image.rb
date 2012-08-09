@@ -99,17 +99,17 @@ module AWS
 
       mutable_attribute :description
 
-      attribute :location, :as => :image_location, :static => true
+      attribute :location, :from => :image_location, :static => true
 
-      attribute :state, :as => :image_state, :to_sym => true
+      attribute :state, :from => :image_state, :to_sym => true
 
-      attribute :owner_id, :as => :image_owner_id, :static => true
+      attribute :owner_id, :from => :image_owner_id, :static => true
 
-      attribute :owner_alias, :as => :image_owner_alias, :static => true
+      attribute :owner_alias, :from => :image_owner_alias, :static => true
 
       attribute :architecture, :to_sym => true, :static => true
 
-      attribute :type, :as => :image_type, :to_sym => true, :static => true
+      attribute :type, :from => :image_type, :to_sym => true, :static => true
 
       attribute :kernel_id, :static => true
 
@@ -146,15 +146,15 @@ module AWS
       # @return [Hash] Returns a hash of block
       #   device mappings for the image.  In each entry, the key is
       #   the device name (e.g. +"/dev/sda1"+) and the value is an
-      #   object with the following methods that return information
+      #   hash with the following keys that return information
       #   about the block device:
       #
-      #   [snapshot_id] The ID of the snapshot that will be used to
+      #   [:snapshot_id] The ID of the snapshot that will be used to
       #                 create this device (may be nil).
       #
-      #   [volume_size] The size of the volume, in GiBs.
+      #   [:volume_size] The size of the volume, in GiBs.
       #
-      #   [delete_on_termination] True if the Amazon EBS volume is
+      #   [:delete_on_termination] True if the Amazon EBS volume is
       #                           deleted on instance termination.
       def block_device_mappings
         (block_device_mapping || []).inject({}) do |h,mapping|

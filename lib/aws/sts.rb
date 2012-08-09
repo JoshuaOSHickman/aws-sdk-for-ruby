@@ -67,12 +67,15 @@ module AWS
     #   account owners are restricted to a maximum of 3600s (one
     #   hour).
     #
-    # @option opts [String] :serial_number
+    # @option opts [String] :serial_nubmer The identification number of the
+    #   Multi-Factor Authentication (MFA) device for the user.
     #
-    # @option opts [String] :token_code
+    # @option opts [String] :token_code The value provided by the MFA device.
+    #   If the user has an access policy requiring an MFA code, provide the
+    #   value here to get permission to resources as specified in the access
+    #   policy.
     #
     # @return [Session]
-    #
     def new_session(opts = {})
       get_session(:get_session_token, opts) do |resp, session_opts|
         Session.new(session_opts)
@@ -134,10 +137,11 @@ module AWS
       end
     end
 
-    # @private
     protected
+
     def get_session(method, opts = {})
-      opts[:duration_seconds] = opts.delete(:duration) if opts[:duration]
+      opts[:duration_seconds] = opts.delete(:duration) if
+        opts[:duration]
       resp = client.send(method, opts)
       credentials = resp[:credentials].dup
       session_opts = {

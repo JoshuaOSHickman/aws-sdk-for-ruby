@@ -11,6 +11,8 @@
 # ANY KIND, either express or implied. See the License for the specific
 # language governing permissions and limitations under the License.
 
+require 'pathname'
+
 module AWS
   module Core
 
@@ -168,6 +170,12 @@ module AWS
       def format response
         pattern.gsub(/:(\w+)/) {|sym| send("_#{sym[1..-1]}", response) }
       end
+
+      # @private
+      def eql? other
+        other.is_a?(self.class) and other.pattern == self.pattern
+      end
+      alias_method :==, :eql?
 
       protected
 

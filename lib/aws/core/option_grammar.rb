@@ -158,6 +158,25 @@ module AWS
         end
   
         # @private
+        module Float
+  
+          extend NoArgs
+  
+          def validate(value, context = nil)
+            raise format_error("float value", context) unless
+              value.kind_of?(Numeric) or
+              value.respond_to? :to_f
+          end
+  
+          def encode_value(value)
+            value.to_f.to_s
+          end
+  
+        end
+
+        Double = Float
+ 
+        # @private
         module Rename
           def self.apply(option, new_name)
             new_name = Inflection.ruby_name(new_name)
@@ -192,8 +211,17 @@ module AWS
             def apply(option, member_descriptors)
               super(option)
               member_option = option.member_option if option.respond_to?(:member_option)
+
+              # ignoring member name descriptors for lists, only useful for rest
+              descriptors = []
+              member_descriptors.each do |descriptor|
+                unless descriptor.is_a?(Hash) and descriptor[:member_name]
+                  descriptors << descriptor
+                end
+              end
+
               member_option ||= ListMember.new
-              member_option = member_option.extend_with_config(*member_descriptors)
+              member_option = member_option.extend_with_config(*descriptors)
               MetaUtils.extend_method(option, :member_option) { member_option }
             end
   

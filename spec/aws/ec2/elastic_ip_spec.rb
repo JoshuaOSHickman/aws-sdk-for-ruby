@@ -89,8 +89,9 @@ module AWS
 
       context '#associated?' do
 
-        it 'returns false when :instance_id is not set' do
+        it 'returns false when :instance_id and :association_id are not set' do
           ip.stub(:instance_id).and_return(nil)
+          ip.stub(:association_id).and_return(nil)
           ip.associated?.should == false
         end
 
@@ -137,6 +138,100 @@ module AWS
 
         it 'should be an alias of delete' do
           ip.method(:release).should == ip.method(:delete)
+        end
+
+      end
+
+      context '#associate' do
+        
+        let(:resp) { client.stub_for(:associate_address) }
+
+        before(:each) do 
+          resp.data[:association_id] = 'assoc-id'
+          client.stub(:associate_address).and_return(resp)
+        end
+
+        context 'vpc elastic ips' do
+          
+          let(:ip) { 
+            ElasticIp.new('1.1.1.1', 
+              :domain => 'vpc', 
+              :allocation_id => 'alloc-id',
+              :config => config) 
+          }
+
+          it 'accpets :instance with an instance object' do
+
+            client.should_receive(:associate_address).with(
+              :allocation_id => 'alloc-id',
+              :instance_id => 'i-12345678')
+
+            ip.associate :instance => Instance.new('i-12345678')
+
+          end
+
+          it 'accpets :instance with an instance id' do
+
+            client.should_receive(:associate_address).with(
+              :allocation_id => 'alloc-id',
+              :instance_id => 'i-12345678')
+
+            ip.associate :instance => 'i-12345678'
+
+          end
+
+          it 'accpets :network_interface with an id' do
+
+            client.should_receive(:associate_address).with(
+              :allocation_id => 'alloc-id',
+              :network_interface_id => 'ni-12345678')
+
+            ip.associate :network_interface => 'ni-12345678'
+
+          end
+
+          it 'accpets :network_interface with an object' do
+
+            client.should_receive(:associate_address).with(
+              :allocation_id => 'alloc-id',
+              :network_interface_id => 'ni-12345678')
+
+            ip.associate :network_interface => NetworkInterface.new('ni-12345678')
+
+          end
+
+        end
+
+        context 'regular elastic ips' do
+
+          let(:ip) { 
+            ElasticIp.new('1.1.1.1', :domain => 'standard', :config => config) 
+          }
+
+          it 'accpets :instance with an instance object' do
+
+            client.should_receive(:associate_address).with(
+              :public_ip => '1.1.1.1',
+              :instance_id => 'i-12345678')
+
+            ip.associate :instance => Instance.new('i-12345678')
+
+          end
+
+          it 'accpets :instance with an instance id' do
+
+            client.should_receive(:associate_address).with(
+              :public_ip => '1.1.1.1',
+              :instance_id => 'i-12345678')
+
+            ip.associate :instance => 'i-12345678'
+
+          end
+
+          it 'returns the association id' do
+            ip.associate(:instance => 'i-12345678').should == 'assoc-id'
+          end
+          
         end
 
       end

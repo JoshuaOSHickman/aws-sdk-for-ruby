@@ -30,7 +30,7 @@ module AWS
       let(:object) { S3Object.new(bucket, 'foo') }
 
       it_behaves_like('it has an ACL',
-                      :set_method => :set_object_acl,
+                      :set_method => :put_object_acl,
                       :get_method => :get_object_acl,
                       :options => {
                         :bucket_name => "foobucket",
@@ -120,15 +120,37 @@ module AWS
 
       context '#write' do
 
+        context ':reduced_redundancy' do
+
+          it 'converts this options to :storage_class when true' do
+            client.should_receive(:put_object).
+              with(hash_including(:storage_class => 'REDUCED_REDUNDANCY')).
+              and_return(client.stub_for(:put_object))
+            object.write "data", :reduced_redundancy => true
+          end
+
+          it 'omits :storage_class when false' do
+            client.should_receive(:put_object).
+              with(hash_not_including(:storage_class)).
+              and_return(client.stub_for(:put_object))
+            object.write "data", :reduced_redundancy => false
+          end
+
+          it 'omits :storage_class not specified' do
+            client.should_receive(:put_object).
+              with(hash_not_including(:storage_class)).
+              and_return(client.stub_for(:put_object))
+            object.write "data", :reduced_redundancy => false
+          end
+
+        end
+
         context 'with no arguments' do
 
-          it 'should call put_object with the bucket, key and empty data' do
-            client.should_receive(:put_object).
-              with(:bucket_name => "foobucket",
-                   :key => "foo",
-                   :data => "").
-              and_return(client.stub_for(:put_object))
-            object.write
+          it 'should raise an argument error' do
+            lambda {
+              object.write
+            }.should raise_error(ArgumentError)
           end
 
         end
@@ -136,11 +158,13 @@ module AWS
         context 'with a string' do
 
           it 'should call put_object with the bucket, key and data' do
-            client.should_receive(:put_object).
-              with(:bucket_name => "foobucket",
-                   :key => "foo",
-                   :data => "HELLO").
-              and_return(client.stub_for(:put_object))
+            client.should_receive(:put_object).with do |options|
+              options[:bucket_name].should eq('foobucket')
+              options[:key].should eq('foo')
+              options[:data].should be_a(StringIO)
+              options[:data].read.should eq('HELLO')
+              options
+            end.and_return(client.stub_for(:put_object))
             object.write("HELLO")
           end
 
@@ -149,19 +173,35 @@ module AWS
         context 'with a file path' do
 
           it 'should call put_object with the bucket, key and data' do
+
             f = Tempfile.new("test")
+            f.write "abc"
+            f.rewind
+
+            # 1.9 supports encoding, 1.8 does not
+            if Object.const_defined?(:Encoding)
+              File.should_receive(:open).
+                with(f.path, 'rb', :encoding => "BINARY").
+                and_return(f)
+            else
+              File.should_receive(:open).with(f.path, 'rb').and_return(f)
+            end
+
             client.should_receive(:put_object).
               with(:bucket_name => "foobucket",
                    :key => "foo",
-                   :file => f.path).
+                   :content_length => 3,
+                   :data => f).
               and_return(client.stub_for(:put_object))
+
             object.write(:file => f.path)
+
           end
 
           it 'should raise an error if there is a data argument' do
             lambda do
               object.write("HELLO", :file => "HELLO")
-            end.should raise_error("Object data passed twice (argument and file path)")
+            end.should raise_error(ArgumentError, /data passed multiple ways/)
           end
 
         end
@@ -169,18 +209,19 @@ module AWS
         context 'with a data option' do
 
           it 'should call put_object with the bucket, key and data' do
+
+            io = double('io', :size => 5)
+            StringIO.should_receive(:new).
+              with('HELLO').
+              and_return(io)
+
             client.should_receive(:put_object).
               with(:bucket_name => "foobucket",
                    :key => "foo",
-                   :data => "HELLO").
+                   :data => io,
+                   :content_length => 5).
               and_return(client.stub_for(:put_object))
             object.write(:data => "HELLO")
-          end
-
-          it 'should raise an error if data is passed as an option and an argument' do
-            lambda do
-              object.write("HELLO", :data => "HELLO")
-            end.should raise_error("Object data passed twice (argument and option)")
           end
 
         end
@@ -193,7 +234,8 @@ module AWS
               client.should_receive(:put_object).
                 with(:bucket_name => "foobucket",
                      :key => "foo",
-                     :data => "HELLO",
+                     :data => instance_of(StringIO),
+                     :content_length => 5,
                      :content_md5 => "62HurZDjuJnGvL4nrFgWYA==").
               and_return(client.stub_for(:put_object))
               object.write("HELLO", :content_md5 => "62HurZDjuJnGvL4nrFgWYA==")
@@ -207,10 +249,38 @@ module AWS
               client.should_receive(:put_object).
                 with(:bucket_name => "foobucket",
                      :key => "foo",
-                     :data => "",
+                     :data => instance_of(StringIO),
+                     :content_length => 0,
                      :content_md5 => "62HurZDjuJnGvL4nrFgWYA==").
               and_return(client.stub_for(:put_object))
-              object.write(:content_md5 => "62HurZDjuJnGvL4nrFgWYA==")
+              object.write('', :content_md5 => "62HurZDjuJnGvL4nrFgWYA==")
+            end
+
+          end
+
+          context 'with acl options' do
+
+            it 'should convert symbolized canned acls to strings' do
+              client.should_receive(:put_object).with(hash_including({
+                :acl => :public_read,
+              })).and_return(client.stub_for(:put_object))
+              object.write('data', :acl => :public_read)
+            end
+
+            it 'passes :grant_* options along to the client' do
+              client.should_receive(:put_object).with(hash_including({
+                :grant_read => 'read',
+                :grant_write => 'write',
+                :grant_read_acp => 'read-acp',
+                :grant_write_acp => 'read-acp',
+                :grant_full_control => 'full-control',
+              })).and_return(client.stub_for(:put_object))
+              object.write('data',
+                :grant_read => 'read',
+                :grant_write => 'write',
+                :grant_read_acp => 'read-acp',
+                :grant_write_acp => 'read-acp',
+                :grant_full_control => 'full-control')
             end
 
           end
@@ -277,7 +347,8 @@ module AWS
 
           it 'should pass additional options to the multipart_upload call' do
             object.should_receive(:multipart_upload).
-              with(:metadata => { "color" => "red" }).
+              with(:metadata => { "color" => "red" },
+                   :data => instance_of(StringIO)).
               and_yield(upload)
             object.write("HELLO",
                          :metadata => { "color" => "red" },
@@ -355,7 +426,7 @@ module AWS
           end
 
           it 'should be an object version with the returned version ID' do
-            resp.stub(:version_id).and_return("abc123")
+            resp.data[:version_id] = "abc123"
             return_value.should be_an(ObjectVersion)
             return_value.config.should be(config)
             return_value.object.should be(object)
@@ -445,16 +516,23 @@ module AWS
           object.multipart_upload {|upload|}
         end
 
-        it 'should abort the upload if an error is raised' do
+        it 'should abort the upload if an error is raised', :foo => true do
 
           client.should_receive(:abort_multipart_upload).
             with(:bucket_name => "foobucket",
                  :key => "foo",
                  :upload_id => "abc123")
 
-          object.multipart_upload do |upload| 
-            upload.add_part('part')
-            raise 'oops'
+          e = StandardError.new('error')
+
+          # after aborting the upload, the error should be re-raised
+          begin
+            object.multipart_upload do |upload|
+              upload.add_part('part')
+              raise e
+            end
+          rescue => error
+            error.should eq(e)
           end
 
         end
@@ -462,7 +540,7 @@ module AWS
         it 'does not abort the upload if an exception is raised' do
           begin
             client.should_not_receive(:abort_multipart_upload)
-            object.multipart_upload {|upload| raise Exception.new } 
+            object.multipart_upload {|upload| raise Exception.new }
           rescue Exception
             nil
           end
@@ -592,7 +670,7 @@ module AWS
           object.delete
         end
 
-        it 'should pass along additional options' do 
+        it 'should pass along additional options' do
           client.should_receive(:delete_object).
             with(:bucket_name => "foobucket", :key => "foo", :version_id => 'vid')
           object.delete(:version_id => 'vid')
@@ -711,7 +789,7 @@ module AWS
       context '#versions' do
 
         it 'returns a versioned object collection' do
-          object.versions.should be_an(ObjectVersionCollection) 
+          object.versions.should be_an(ObjectVersionCollection)
         end
 
       end
@@ -720,16 +798,16 @@ module AWS
 
         let(:http_request) { Request.new }
 
-        let(:signer) { 
-          double("signer",
+        let(:credential_provider) {
+          Core::CredentialProviders::StaticProvider.new({
             :access_key_id => "ACCESS_KEY",
-            :session_token => nil,
-            :sign => "SIGNATURE") 
+            :secret_access_key => "SECRET",
+          })
         }
 
         before(:each) do
           http_request.stub(:canonicalized_resource).and_return("/foo/bar")
-          config.stub(:signer).and_return(signer)
+          config.stub(:credential_provider).and_return(credential_provider)
           Request.stub(:new).and_return(http_request)
         end
 
@@ -769,29 +847,20 @@ module AWS
           object.url_for(:read, :version_id => 'version-id-string')
         end
 
-        it 'should sign the request using SHA1' do
-          signer.should_receive(:sign).with(an_instance_of(String),
-                                            "sha1")
-          object.url_for(:get)
-        end
-
         context 'federated sessions' do
 
-          before(:each) do
-            signer.stub(:session_token).and_return('session-token')
-          end
+          let(:credential_provider) {
+            Core::CredentialProviders::StaticProvider.new({
+              :access_key_id => "ACCESS_KEY",
+              :secret_access_key => "SECRET",
+              :session_token => "SESSION_TOKEN",
+            })
+          }
 
           it 'adds the security token to the request' do
             http_request.stub(:add_param)
             http_request.should_receive(:add_param).
-              with('x-amz-security-token', 'session-token')
-            object.url_for(:get)
-          end
-
-          it 'addes the security token to the string to sign' do
-            signer.should_receive(:sign).with do |string,type|
-              string.should =~ /x-amz-security-token:session-token/
-            end
+              with('x-amz-security-token', 'SESSION_TOKEN')
             object.url_for(:get)
           end
 
@@ -833,77 +902,10 @@ module AWS
         it_should_behave_like("presigned url request parameter",
                               :response_content_encoding, "response-content-encoding")
 
-        context 'string to sign' do
-
-          let(:string) do
-            sts = nil
-            signer.should_receive(:sign) do |string, digest|
-              sts = string
-            end
-            object.url_for(*args)
-            sts
-          end
-
-          let(:lines) { string.split("\n", -1) }
-
-          let(:args) { [:get] }
-
-          it 'should have GET on the first line by default' do
-            lines.first.should == "GET"
-          end
-
-          it 'should accept a symbol HTTP method name' do
-            args.replace([:put])
-            lines.first.should == "PUT"
-          end
-
-          it 'should accept a string HTTP method name' do
-            args.replace(["PUT"])
-            lines.first.should == "PUT"
-          end
-
-          it 'should interpret :read as GET' do
-            args.replace([:read])
-            lines.first.should == "GET"
-          end
-
-          it 'should interpret :write as PUT' do
-            args.replace([:write])
-            lines.first.should == "PUT"
-          end
-
-          it 'should have 2 blank lines after the first one by default' do
-            lines[1,2].should == [""] * 2
-          end
-
-          it 'should expire in one hour by default' do
-            Time.stub(:now).and_return(Time.parse("2011-05-23 17:34:48 -0700"))
-            lines[3].should == Time.parse("2011-05-23 18:34:48 -0700").to_i.to_s
-          end
-
-          it 'should have the canonicalized resource on the last line' do
-            lines.last.should == "/foo/bar"
-          end
-
-          it 'should not end with a newline' do
-            string[-1].should_not == "\n"
-          end
-
-        end
 
         it 'should add a parameter for the access key' do
           object.url_for(:get).query.split("&").
             should include("AWSAccessKeyId=ACCESS_KEY")
-        end
-
-        it 'should add a parameter for the signature' do
-          object.url_for(:get).query.split("&").
-            should include("Signature=SIGNATURE")
-        end
-
-        it 'should add a parameter for the signature' do
-          object.url_for(:get).query.split("&").
-            should include("Signature=SIGNATURE")
         end
 
         it 'should add a parameter for the expiration timestamp' do

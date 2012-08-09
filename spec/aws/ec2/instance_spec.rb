@@ -57,7 +57,7 @@ module AWS
         before(:each) do
           response.stub(:output).and_return("YWJj\n")
         end
-        
+
         it 'calls get_console_output on the client' do
           client.should_receive(:get_console_output).
             with(:instance_id => instance.id).
@@ -476,6 +476,22 @@ module AWS
           instance.availability_zone.should == "us-east-1a"
         end
 
+      end
+
+      context '#iam_instance_profile_id' do
+        let(:attribute) { :iam_instance_profile_id }
+        let(:response_field) { :iam_instance_profile }
+        let(:response_value) {{ :id => 'profile-id', :arn => 'profile-arn' }}
+        let(:translated_value) { 'profile-id' }
+        it_should_behave_like "ec2 instance attribute accessor (describe_instances)"
+      end
+
+      context '#iam_instance_profile_arn' do
+        let(:attribute) { :iam_instance_profile_arn }
+        let(:response_field) { :iam_instance_profile }
+        let(:response_value) {{ :id => 'profile-id', :arn => 'profile-arn' }}
+        let(:translated_value) { 'profile-arn' }
+        it_should_behave_like "ec2 instance attribute accessor (describe_instances)"
       end
 
       context '#image_id' do
@@ -1026,7 +1042,7 @@ module AWS
         let(:resp) { client.new_stub_for(:describe_instances) }
 
         before(:each) do
-          
+
           stub_response_instance(resp, "i-123", {
             :instance_id => "i-123",
             :instance_state => {
@@ -1072,10 +1088,11 @@ module AWS
 
           it 'should populate from the current state' do
             response_instance[:current_state] = {
-              :name => "foo-bar", 
+              :name => "foo-bar",
               :code => 80,
             }
-            populated[:status].should == :foo_bar
+            populated[:status].should eq(:foo_bar)
+            populated[:status_code].should eq(80)
           end
 
         end
@@ -1109,7 +1126,7 @@ module AWS
                 { :name => 'instance-id', :values => [instance.id]}
               ]).and_return(response)
           end
-          
+
           it 'returns nil if there is no elastic ip address associated' do
             response.data[:addresses_set] = []
             instance.elastic_ip.should be_nil
@@ -1149,7 +1166,7 @@ module AWS
           it 'accepts allocation ids for vpc instances' do
 
             client.should_receive(:associate_address).with(
-              :allocation_id => 'alloc-id', 
+              :allocation_id => 'alloc-id',
               :instance_id => 'i-123')
 
             instance.stub(:vpc_id).and_return('vpc-id')
@@ -1160,7 +1177,7 @@ module AWS
           it 'accepts allocation ids for vpc instances' do
 
             client.should_receive(:associate_address).with(
-              :allocation_id => 'alloc-id', 
+              :allocation_id => 'alloc-id',
               :instance_id => 'i-123')
 
             elastic_ip = ElasticIp.new('1.1.1.1', :allocation_id => 'alloc-id')
@@ -1175,21 +1192,21 @@ module AWS
         context '#ip_address=' do
 
           it 'should be an alias of associate_elastic_ip' do
-            instance.method(:ip_address=).should == 
+            instance.method(:ip_address=).should ==
               instance.method(:associate_elastic_ip)
           end
 
         end
 
         context '#disassociate_elastic_ip_address' do
-          
+
           it 'calls disassociate on its elastic ip' do
             elastic_ip = double('elastic-ip')
             elastic_ip.should_receive(:disassociate)
             instance.stub(:elastic_ip).and_return(elastic_ip)
             instance.disassociate_elastic_ip
           end
-          
+
           it 'raises an exception when it does not have an elastic ip' do
             instance.stub(:elastic_ip).and_return(nil)
             lambda { instance.disassociate_elastic_ip }.should raise_error
@@ -1231,8 +1248,8 @@ module AWS
 
           before(:each) do
 
-            resp.request_options = { 
-              :instance_id => 'i-123', 
+            resp.request_options = {
+              :instance_id => 'i-123',
               :attribute => 'instanceType',
             }
 
@@ -1249,7 +1266,7 @@ module AWS
 
         context 'populated from describe_instances' do
 
-          let(:response_instance) {{ 
+          let(:response_instance) {{
             :instance_id => "i-123",
             :instance_type => "t1.micro",
           }}
@@ -1270,6 +1287,16 @@ module AWS
           end
 
         end
+
+      end
+
+      context '#export' do
+
+        it 'calls #create_instance_export_task on the client'
+
+        it 'returns a populated ExportTask object'
+
+        it 'calling #cancel terminates the export task'
 
       end
 

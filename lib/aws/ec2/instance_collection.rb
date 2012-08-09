@@ -24,7 +24,7 @@ module AWS
     #
     # To run an instance:
     #
-    #   ec2.instances.create(:image_id => "ami-8c1fece5")
+    #   ec2.instances.create(:image_id => "ami-1b814f72")
     #
     # To get an instance by ID:
     #
@@ -76,12 +76,16 @@ module AWS
       # @param [Hash] options Options for new instance.  +:image_id+ is
       #   the only required option.
       #
-      # @option options :count How many instances to request.  By
+      # @option options [Integer] :count How many instances to request.  By
       #   default one instance is requested.  You can specify this
       #   either as an integer or as a Range, to indicate the
       #   minimum and maximum number of instances to run.  Note that
       #   for a new account you can request at most 20 instances at
       #   once.
+      #
+      # @option options [String] :iam_instance_profile The name or
+      #   ARN of an IAM instance profile.  This provides credentials
+      #   to the EC2 instance(s) via the instance metadata service.
       #
       # @option options [Hash] :block_device_mappings This must be a
       #   hash; the keys are device names to map, and the value for
@@ -109,8 +113,8 @@ module AWS
       #                              to delete the volume when the
       #                              instance is terminated.
       #
-      # @option options [Boolean] :monitoring Setting this to true
-      #   enables CloudWatch monitoring on the instances once they
+      # @option options [Boolean] :monitoring_enabled Setting this to
+      #   +true+ enables CloudWatch monitoring on the instances once they
       #   are started.
       #
       # @option options [String] :availability_zone Specifies the
@@ -124,13 +128,16 @@ module AWS
       #   use.  Note: Launching public images without a key pair ID
       #   will leave them inaccessible.
       #
+      # @option options [KeyPair] :key_pair A {KeyPair} that should
+      #   be used when launching an instance.
+      #
       # @option options [Array] :security_groups Security groups are used
-      #   to determine network access rules for the instances.  
+      #   to determine network access rules for the instances.
       #   +:security_groups+ can be a single value or an array of values.
       #   Values should be group name strings or {SecurityGroup} objects.
       #
-      # @option options [Array<String>] :security_group_ids Security groups 
-      #   are used to determine network access rules for the instances.  
+      # @option options [Array<String>] :security_group_ids Security groups
+      #   are used to determine network access rules for the instances.
       #   +:security_group_ids+ accepts a single ID or an array of security
       #   group IDs.
       #
@@ -169,11 +176,11 @@ module AWS
       #   Determines whether the instance stops or terminates on
       #   instance-initiated shutdown.
       #
-      # @option options [Subnet,String] :subnet (nil) The VPC Subnet (or 
+      # @option options [Subnet,String] :subnet (nil) The VPC Subnet (or
       #   subnet id string) to launch the instance in.
       #
       # @option options [String] :private_ip_address (nil) If you're using VPC,
-      #   you can optionally use this option to assign the instance a 
+      #   you can optionally use this option to assign the instance a
       #   specific available IP address from the subnet (e.g., '10.0.0.25').
       #   This option is not valid for instances launched outside a VPC (i.e.
       #   those launched without the :subnet option).
@@ -185,12 +192,23 @@ module AWS
       #   valid for instances launched outside a VPC (e.g. those
       #   launched without the :subnet option).
       #
-      # @return [Instance or Array] If a single instance is being created, 
+      # @return [Instance or Array] If a single instance is being created,
       #   this returns an {EC2::Instance} to represent the newly
-      #   created instance.  Otherwise it returns an array of instance 
+      #   created instance.  Otherwise it returns an array of instance
       #   objects.
       #
       def create options = {}
+
+        if profile = options.delete(:iam_instance_profile)
+          profile = case profile
+          when /^arn:aws:iam::/ then { :arn => profile }
+          when String then { :name => profile }
+          when Hash then profile
+          else
+            msg = "expected a name or ARN string for :iam_instance_profile"
+          end
+          options[:iam_instance_profile] = profile
+        end
 
         if image = options.delete(:image)
           options[:image_id] = image.id
@@ -230,7 +248,7 @@ module AWS
         end
 
         if options[:dedicated_tenancy]
-          placement[:tenancy] = 'dedicated' 
+          placement[:tenancy] = 'dedicated'
           options.delete(:dedicated_tenancy)
         end
 
@@ -333,7 +351,7 @@ module AWS
 
         else
 
-          # non-vpc instances accept both group names and ids, so 
+          # non-vpc instances accept both group names and ids, so
           # we accept whichever
           options[:security_groups] = names unless names.empty?
           options[:security_group_ids] = ids unless ids.empty?
