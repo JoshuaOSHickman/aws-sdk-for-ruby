@@ -359,6 +359,11 @@ module AWS
           message = config.log_formatter.format(response)
           config.logger.send(config.log_level, message)
         end
+        if defined?(LOGGER)
+          if response.duration > 0.1
+            LOGGER.error "Dynamo Latency > 0.1 for #{response}"
+          end
+        end
         nil
       end
 
