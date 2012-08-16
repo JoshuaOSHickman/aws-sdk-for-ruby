@@ -361,7 +361,7 @@ module AWS
         end
         if defined?(LOGGER)
           if response.duration > 0.1
-            LOGGER.error "Dynamo Latency > 0.1 for #{response}"
+            LOGGER.error "Dynamo Latency > 0.1 for #{response.throttled? ? 'throttled' : 'unthrottled'} request #{response.inspect}"
           end
         end
         nil
