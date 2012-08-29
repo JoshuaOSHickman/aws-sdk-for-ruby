@@ -361,7 +361,7 @@ module AWS
         end
         if defined?(LOGGER)
           if response.duration > 0.1
-            LOGGER.error "Dynamo Latency > 0.1 (latency: #{response.duration}) for #{response.throttled? ? 'throttled' : 'unthrottled'} request Response: #{response.inspect}, Request: #{response.http_request.inspect}"
+            LOGGER.error "Dynamo Latency > 0.1 (latency: #{response.duration}) for #{response.throttled? ? 'throttled' : 'unthrottled'} request. RequestId: #{response.http_response.headers['x-amzn-requestid'].first} Response: #{response.inspect}, Request: #{response.http_request.inspect}"
           end
         end
         nil
